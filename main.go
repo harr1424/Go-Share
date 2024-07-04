@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -55,7 +56,16 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func fileHandler(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, r.URL.Path[10:])
+	encodedFilename := r.URL.Path[len("/download/"):]
+
+	filename, err := url.QueryUnescape(encodedFilename)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	filepath := filepath.Join("uploads", filename)
+	http.ServeFile(w, r, filepath)
 }
 
 func main() {

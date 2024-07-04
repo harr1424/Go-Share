@@ -15,7 +15,7 @@
     <h2>Uploaded files:</h2>
     <ul>
         {{range .Files}}
-            <li><a href="/uploads/{{.Name}}">{{.Name}}</a></li>
+            <li><a href="/download/{{.Name}}">{{.Name}}</a></li>
         {{else}}
             <li>No files uploaded yet.</li>
         {{end}}

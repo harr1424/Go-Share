@@ -49,17 +49,19 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		http.Redirect(w, r, "/", http.StatusSeeOther)
+	} else {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 	}
 }
 
 func fileHandler(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, r.URL.Path[9:])
+	http.ServeFile(w, r, r.URL.Path[10:])
 }
 
 func main() {
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/new", uploadHandler)
-	http.HandleFunc("/download", fileHandler)
+	http.HandleFunc("/download/", fileHandler)
 
 	fmt.Println("Starting server at https://localhost:8443")
 	err := http.ListenAndServeTLS(":8443", "cert.pem", "key.pem", nil)

@@ -3,75 +3,42 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"io"
 	"net/http"
-	"net/url"
-	"os"
-	"path/filepath"
+
+	"github.com/gorilla/sessions"
 )
 
 var templates = template.Must(template.ParseGlob("templates/*.html"))
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	files, err := os.ReadDir("uploads")
-	if err != nil {
-		http.Error(w, "Error finding available files", http.StatusInternalServerError)
-		return
-	}
+func addSecurityHeaders(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
 
-	data := struct {
-		Files []os.DirEntry
-	}{
-		Files: files,
-	}
-
-	templates.ExecuteTemplate(w, "index.html", data)
-}
-
-func uploadHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "POST" {
-		file, handler, err := r.FormFile("file")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer file.Close()
-
-		localFile, err := os.Create(filepath.Join("uploads", handler.Filename))
-		if err != nil {
-			http.Error(w, "Unable to create a copy of the file on the server", http.StatusInternalServerError)
-			return
-		}
-		defer localFile.Close()
-
-		if _, err := io.Copy(localFile, file); err != nil {
-			http.Error(w, "Unable to copy file to server", http.StatusInternalServerError)
-			return
-		}
-
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-	} else {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-	}
-}
-
-func fileHandler(w http.ResponseWriter, r *http.Request) {
-	encodedFilename := r.URL.Path[len("/download/"):]
-
-	filename, err := url.QueryUnescape(encodedFilename)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	filepath := filepath.Join("uploads", filename)
-	http.ServeFile(w, r, filepath)
+		h.ServeHTTP(w, r)
+	})
 }
 
 func main() {
-	http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/new", uploadHandler)
-	http.HandleFunc("/download/", fileHandler)
+	store.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   60 * 10, // in seconds
+		HttpOnly: true,
+		Secure:   true, // set HTTPS-only cookies
+		SameSite: http.SameSiteStrictMode,
+	}
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", authMiddleware(indexHandler))
+	mux.HandleFunc("/login", loginHandler)
+	mux.HandleFunc("/logout", logoutHandler)
+	mux.HandleFunc("/new", authMiddleware(uploadHandler))
+	mux.HandleFunc("/download/", authMiddleware(fileHandler))
+
+	http.Handle("/", addSecurityHeaders(mux))
 
 	fmt.Println("Starting server at https://localhost:8443")
 	err := http.ListenAndServeTLS(":8443", "cert.pem", "key.pem", nil)
